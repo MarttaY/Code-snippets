@@ -1,0 +1,124 @@
+SOURCE FILE: data_and_graphs.xlsm
+AUTHOR: Reetta Ylostalo
+DESCRIPTION:
+This file includes contents of "Main" module from a VBA script
+The file fetches records from access tables to data_and_graphs.xlsm, joins the records onto one table, combines isotopic measurement results with other analysis results, does checks, corrections (e.g. unit conversions) and adds calculated values. Then it duplicates the finished data sheet and changes the values containing '<' to -1, because only numeric data shows correctly in graphs. The macro file can draw two separate sets of graphs on different sheets.
+Subprograms starting with 'button_' contain code that is attached to the buttons in the xlsm worbook.
+'***** separates the statements and subprograms in this file
+
+
+*****THE SAMPLE STARTS HERE*****
+
+
+Option Explicit
+Option Compare Text
+
+
+
+*****
+
+
+Sub button_fromAccessToExcel()
+
+    Application.ScreenUpdating = False
+    
+    Call fetchSamplesRecords
+    Call trimColumns
+    Call JoinTables
+    Call setFilters(ThisWorkbook.Worksheets("results"))
+
+    ThisWorkbook.Worksheets("results").columns(findword("start_time", ThisWorkbook.Worksheets("results").Rows(1))).NumberFormat = "d/m/yyyy"
+    ThisWorkbook.Worksheets("results").columns(findword("end_time", ThisWorkbook.Worksheets("results").Rows(1))).NumberFormat = "d/m/yyyy"
+    ThisWorkbook.Worksheets("results").Cells.WrapText = False
+    ThisWorkbook.Worksheets("results uc-1").Cells.Clear
+    
+    Application.ScreenUpdating = True	
+End sub
+
+
+
+*****
+
+
+'
+Sub button_dataCalculations()
+    Application.ScreenUpdating = False
+    'Application.Cursor = xlWait 'blinking cursor slows down vba macros, but reverting it to the arrow when program crashes should be added here
+    Dim i As Integer
+    Dim answer As Integer
+    Dim ws As Worksheet: Set ws = ThisWorkbook.Worksheets("results")
+    Dim convUgs() As String: convUgs = Split("Fe (total) UNIT;Iron, Fe2+ UNIT;Iron, Fe3+ (calculated) UNIT", ";") 'remove this quick fix when corrected in database
+
+    Call mergeIsotopes("results")
+    Call defWatertypes(ws)
+    Call fillMissingZs(ws) 'fill in bottom coordinate
+    Call allMolarToMgL(ws)
+    Call colorBeyondActionLimits(ws)
+    
+    For i = 0 To UBound(convUgs)
+        Call convertUgsToMgs(findword(convUgs(i), ws.Rows(1)), ws)
+    Next
+    
+    'copies the content of "results" to "results dl -1"
+    If sheetexists("results dl -1") Then
+        ThisWorkbook.Worksheets("results dl -1").Cells.Clear
+        ws.Cells.Copy _
+        Destination:=ThisWorkbook.Worksheets("results dl -1").Cells
+        Call uncertaintyMinus1("results dl -1")
+        Call calculatedCVals(ThisWorkbook.Worksheets("results dl -1")) 'C from total alkalinity and HCO3 from DIC
+        Call setFilters(ThisWorkbook.Worksheets("results dl -1"))
+        Call setFilters(ws)
+        
+    Else
+        answer = MsgBox("Worksheet 'results dl -1', where results below detection limit are indicated as -1, is missing. Do you want to create the worksheet?", vbQuestion + vbYesNo + vbDefaultButton2, "Worksheet missing")
+        If answer = vbYes Then
+            ws.Copy After:=ws
+            Set ws = Sheets(ws.Index + 1) 'a new sheet appears next to ws tab
+            ws.Name = "results dl -1"
+            Call uncertaintyMinus1(ws.Name)
+            Call setFilters(ws)
+        End If
+    End If
+    
+    'Application.Cursor = xlDefault
+    Application.ScreenUpdating = True
+
+End Sub
+
+
+
+*****
+
+
+
+Sub button_clCharts()
+    Call clcharts
+End Sub
+
+
+
+*****
+
+
+Sub button_timeSeries()
+    Call Timeseries
+End Sub
+
+
+*****
+
+
+Sub button_delClCharts()
+    Call deleteCharts(ThisWorkbook.Worksheets("Chloride graphs"))
+End Sub
+
+
+*****
+
+
+Sub button_customTimeseriesMarkers() 
+'other graphs have fixed layout!
+
+    Call updateMarkersFromLegend(ThisWorkbook.Worksheets("time series"), ThisWorkbook.Worksheets("time series").ChartObjects("Legend"))
+
+End Sub

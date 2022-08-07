@@ -1,0 +1,125 @@
+FROM FILE: data_and_graphs.xlsm
+AUTHOR: Reetta Ylostalo 2021
+CREATED IN: 2021
+DESCRIPTION:
+This is a sample from a VBA module containing subprograms that draw a set of scatter plots. This file contains some of the macro file's subprograms and functions. The order the scripts are run is presented in VBA main.txt .
+'***** separates the statements and subprograms in this file
+
+LIST OF SUBS AND FUNCTIONS IN THIS FILE:
+Sub timeSeries()
+Function findWord(word As String, rng As Range) As Integer
+Function getChartLocations(amountOfCharts As Integer, xOffset As Integer, yOffset As Integer)
+
+
+***** THE SAMPLE STARTS HERE *****
+
+
+Sub timeSeries()
+'Presumption: there is a column that contains info, which time series the data row belongs to.
+    
+    Dim wtSeries() As String
+    Dim chartSet() As Variant
+    Dim startrow As Integer: startrow = 2
+    Dim cht As Chart
+    Dim i As Integer, j As Integer
+    Dim srsColName As String 'column with time series ID:s
+    Dim srsCol As Integer
+    Dim cCol As Integer 'concentration
+    Dim dateCol As Integer
+    Dim chtPlaces() As String
+    Dim datasht As Worksheet: Set datasht = ThisWorkbook.Worksheets("results history")
+
+    Dim chartSht As Worksheet: Set chartSht = ThisWorkbook.Worksheets("time series")
+    Dim ns As series
+
+    srsColName = "Series"
+    srsCol = findword(srsColName, datasht.Rows(1))
+    chartSet = getTimeChartNames
+    chtPlaces = getTimeseriesLocations(UBound(chartSet(0)) + 1, 2, 8)
+    
+    Call sortByColumn("results history", colLetter(findword("sampling_date", datasht.Rows(1))))
+    Call sortByColumn("results history", colLetter(srsCol))
+    wtSeries = getDrawableSeries(datasht, srsColName)
+
+
+    For i = 0 To UBound(chartSet(1))
+        Set cht = chartSht.Shapes.AddChart().Chart
+        cht.ChartType = xlXYScatterLines
+        cht.Parent.Name = chartSet(1)(i)
+        cht.ChartArea.Left = Range(chtPlaces(i)).Left
+        cht.ChartArea.Top = Range(chtPlaces(i)).Top
+        
+        With cht
+            
+            cCol = findword((chartSet(0)(i)), datasht.Rows(1))
+            dateCol = findword("sampling_date", datasht.Rows(1))
+            For j = 0 To UBound(wtSeries) Step 3
+                Set ns = .SeriesCollection.NewSeries
+                ns.Name = wtSeries(j)
+                ns.XValues = _
+                datasht.Range(datasht.Cells(CInt(wtSeries(j + 1)), dateCol), datasht.Cells(CInt(wtSeries(j + 2)), dateCol))
+                ns.Values = _
+                datasht.Range(datasht.Cells(CInt(wtSeries(j + 1)), cCol), datasht.Cells(CInt(wtSeries(j + 2)), cCol)) 'add data ranges CInt(wtSeries(1))
+                
+                ns.MarkerStyle = xlMarkerStyleCircle
+                ns.Format.Line.Weight = 1
+            Next
+
+            Call timeChartSpecs(cht, cht.Parent.Name, datasht)
+        End With
+    Next
+    
+    Call makeLegend(chartSht.Name)
+
+End Sub
+
+
+
+*****
+
+
+
+Public Function findWord(word As String, rng As Range) As Integer
+
+    'looks for 'word' string inside rng
+    'returns the relative number of order of the field, where string beginning with 'word' is found
+    'If no cell with text that begins with 'word' is found, returns -1
+    
+    If IsNumeric(Application.Match((word & "*"), rng, 0)) = True Then
+        findWord = Application.WorksheetFunction.Match((word & "*"), rng, 0)
+    Else
+        findWord = -1
+    End If
+    
+End Function
+
+
+
+*****
+
+
+
+Function getChartLocations(amountOfCharts As Integer, xOffset As Integer, yOffset As Integer)
+
+'xOffset = distance of 1st chart from left border of the sheet as number of columns
+'yOffset = distance of 1st chart from upper border of the sheet as number of columns
+'returns string array with chart locations on a sheet (["B2"];["H2"] etc.).
+'here 3 charts side by side with upper left corners 6 columns and 18 rows is wanted
+
+Dim spacing As Integer: spacing = 6
+Dim columns(2) As String
+columns(0) = Split(Cells(, xOffset).Address, "$")(1)
+columns(1) = Split(Cells(, xOffset + spacing).Address, "$")(1)
+columns(2) = Split(Cells(, xOffset + spacing * 2).Address, "$")(1)
+
+Dim locations() As String
+ReDim locations(amountOfCharts - 1)
+Dim i As Integer
+
+For i = 0 To UBound(locations)
+    locations(i) = columns(i Mod 3) & yOffset + (spacing * 3) * Int(i / 3)
+    'Debug.Print (locations(i))
+Next
+
+getChartLocations = locations
+End Function
